@@ -1,0 +1,14 @@
+# Tests
+test/swift-mode.el
+
+### macOS ###
+*.DS_Store
+
+### Elisp ###
+*.elc
+
+# Packaging
+.cask
+
+# Backup files
+*~
