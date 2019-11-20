@@ -255,7 +255,7 @@ If BUILD-SETTINGS is nil return flycheck-swiftx--xcrun-sdk-path."
   "Return list of full paths to swift files in the specified DIRECTORY."
   (seq-filter
    (lambda (elt) (eq 0 (string-match-p "[^\.].*" (file-name-nondirectory elt))))
-   (directory-files directory t ".*\.swift$")))
+   (directory-files-recursively directory ".*\.swift$")))
 
 (defun flycheck-swiftx--source-files (&optional xcproj target-name)
   "Return the swift source files associated with the current buffer.
