@@ -89,6 +89,18 @@ The option is available only on macOS."
   :type 'string
   :safe #'stringp)
 
+(flycheck-def-option-var flycheck-swiftx-sdk nil swift
+  "Specify which SDK to use when typechecking (macos, iphoneos etc).
+
+Ignored if the sdk is obtained from an Xcode project.
+
+When non-nil, set the SDK name to find the tools, via `xcrun --sdk'.
+The option is available only on macOS.
+
+Use `xcodebuild -showsdks' to list the available SDK names."
+  :type 'string
+  :safe #'stringp)
+
 (flycheck-def-option-var flycheck-swiftx-build-options nil swiftx
   "An list of of swiftc build options.
 
@@ -233,12 +245,11 @@ If no valid sdk is found, return flycheck-swiftx--xcrun-sdk-path using
 XCRUN-PATH.
 
 If BUILD-SETTINGS is nil return flycheck-swiftx--xcrun-sdk-path."
-  (if build-settings
-      (let ((sdk-root (alist-get 'SDKROOT build-settings)))
-        (when (equal sdk-root "iphoneos")
-          (setq sdk-root "iphonesimulator"))
-        (flycheck-swiftx--xcrun-sdk-path xcrun-path sdk-root))
-    (flycheck-swiftx--xcrun-sdk-path xcrun-path)))
+  (let ((sdk-root (or (alist-get 'SDKROOT build-settings)
+                      flycheck-swiftx-sdk)))
+    (when (equal sdk-root "iphoneos")
+      (setq sdk-root "iphonesimulator"))
+    (flycheck-swiftx--xcrun-sdk-path xcrun-path sdk-root)))
 
 (defun flycheck-swiftx--list-swift-files (directory)
   "Return list of full paths to swift files in the specified DIRECTORY."
