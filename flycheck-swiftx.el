@@ -81,6 +81,32 @@ The option is available only on macOS."
   :type 'string
   :safe #'stringp)
 
+(flycheck-def-option-var flycheck-swiftx-build-options nil swiftx
+  "An list of of swiftc build options.
+
+When flycheck-swiftx-project-type is 'xcode these build options
+are additional to the project's options.
+
+May be specified as a dir local variable in the project's root."
+  :type '(repeat (string :tag "Build option"))
+  :safe #'flycheck-string-list-p)
+
+(flycheck-def-option-var flycheck-swiftx-sources nil swiftx
+  "Specify sources files/directory to parse.
+
+Ignored if flycheck-swiftx-project-type is 'xcode.
+
+When `flycheck-swiftx-sources' is a single directory, flycheck-swiftx will recursively
+include all .swift files found in the directory.
+
+When `flycheck-swiftx-sources' is a list of file paths, include these as-is.
+
+Paths may be absolute or specified relative to the project's root directory.
+
+May be specified as a dir local variable in the project's root."
+  :type '(repeat (string :tag "Source directory or file list"))
+  :safe #'flycheck-string-list-p)
+
 (defvar flycheck-swiftx--cache-directory nil
   "The cache directory for `flycheck-swiftx'.")
 
@@ -212,23 +238,42 @@ If BUILD-SETTINGS is nil return flycheck-swiftx--xcrun-sdk-path."
    (lambda (elt) (eq 0 (string-match-p "[^\.].*" (file-name-nondirectory elt))))
    (directory-files directory t ".*\.swift$")))
 
-(defun flycheck-swiftx--source-files (xcproj target-name)
+(defun flycheck-swiftx--source-files (&optional xcproj target-name)
   "Return the swift source files associated with the current buffer.
 
 If XCPROJ and TARGET-NAME are non-nil then returns the source files
 for the specified Xcode target.
 
-Otherwise returns all .swift file found in the current buffer's directory."
-  (if xcproj
-      (xcode-project-build-file-paths xcproj
-                                      target-name
-                                      "PBXSourcesBuildPhase"
-                                      (lambda (file)
-                                        (xcode-project-file-ref-extension-p file "swift"))
-                                      'absolute)
-    (let* ((file-name (or load-file-name buffer-file-name))
-           (directory-name (file-name-directory file-name)))
-      (flycheck-swiftx--list-swift-files directory-name))))
+Otherwise returns all .swift file specified by `flycheck-swiftx-sources'."
+  (cond (xcproj
+         (xcode-project-build-file-paths xcproj
+                                         target-name
+                                         "PBXSourcesBuildPhase"
+                                         (lambda (file)
+                                           (xcode-project-file-ref-extension-p file "swift"))
+                                         'absolute))
+        ((and (stringp flycheck-swiftx-sources)
+              (file-directory-p flycheck-swiftx-sources))
+         (flycheck-swiftx--list-swift-files flycheck-swiftx-sources))
+        ((listp flycheck-swiftx-sources)
+         (let ((directory-name (file-name-directory
+                                (or load-file-name buffer-file-name))))
+           (flycheck-swiftx--expand-inputs flycheck-swiftx-sources directory-name)))))
+
+(defun flycheck-swiftx--expand-inputs (inputs &optional directory)
+  "Return the expanded inputs.
+
+If input files `INPUTS' is not nil, return the list of expanded
+input files using `DIRECTORY' as the default directory."
+  (let (expanded-inputs)
+    (dolist (input inputs expanded-inputs)
+      (if (file-name-absolute-p input)
+          (setq expanded-inputs
+                (append expanded-inputs (file-expand-wildcards input t)))
+        (setq expanded-inputs
+              (append expanded-inputs
+                      (file-expand-wildcards
+                       (expand-file-name input directory) t)))))))
 
 (defun flycheck-swiftx--objc-bridging-header (xcproj-path build-settings)
   "Return path to Objc bridging header if found in BUILD-SETTINGS."
@@ -280,60 +325,74 @@ Return nil if options is nil."
 (defun flycheck-swiftx--swiftc-options (file-name xcrun-path)
   "Return a list of swiftc command line options for FILE-NAME.
 
-If `flycheck-swiftx-project-type' is `xcode' then use the associated
+When `flycheck-swiftx-project-type' is `xcode' then use the associated
 Xcode project's build settings to determine command line options.
 
-The XCRUN-PATH is used to locate tools and sdks.
+The XCRUN-PATH is used to locate sdks if necessary.
 
 Otherwise fall back to the flycheck-swiftx custom options."
-  (let* ((xcproj-path (xcode-project-find-xcodeproj file-name))
-         (xcproj (when (eq flycheck-swiftx-project-type 'xcode)
-                   (flycheck-swiftx--load-xcode-project xcproj-path)))
-         (target-name (when xcproj
-                        (car (xcode-project-target-names-for-file xcproj file-name "PBXSourcesBuildPhase"))))
-         (build-settings (when target-name
-                           (flycheck-swiftx--xcode-build-settings xcproj target-name)))
-         (build-products-dir (when target-name
-                               (xcode-project-concat-path (flycheck-swiftx--target-build-dir target-name)
-                                                          "Build/Products"
-                                                          (or flycheck-swiftx-xcode-build-config "Debug")))))
-    `(
-      ,@(flycheck-swiftx--append-options "-module-name" target-name)
-      ,@(flycheck-swiftx--append-options "-target"
-                                              (flycheck-swiftx--target build-settings))
-      ,@(flycheck-swiftx--append-options "-swift-version"
-                                              (flycheck-swiftx--swift-version build-settings))
-      ,@(flycheck-swiftx--append-options "-sdk"
-                                         (flycheck-swiftx--sdk-path build-settings xcrun-path))
-      ,@(flycheck-swiftx--append-options "-import-objc-header"
-                                         (flycheck-swiftx--objc-bridging-header xcproj-path build-settings))
-      ,@(flycheck-swiftx--objc-inference build-settings)
-      ,@(flycheck-swiftx--append-options "-D"
-                                         (flycheck-swiftx--gcc-compilation-flags build-settings))
-      ;; Other compiler flags
-      ,@(flycheck-swiftx--list-option 'OTHER_SWIFT_FLAGS build-settings)
-      ;; Search paths
-      ,@(flycheck-swiftx--append-options "-F"
-                                      (flycheck-swiftx--list-option 'FRAMEWORK_SEARCH_PATHS
-                                                                     build-settings))
-      ,@(flycheck-swiftx--append-options "-I"
-                                      (flycheck-swiftx--list-option 'HEADER_SEARCH_PATHS
-                                                                     build-settings))
-      ,@(flycheck-swiftx--append-options "-I"
-                                      (flycheck-swiftx--list-option 'USER_HEADER_SEARCH_PATHS
-                                                                     build-settings))
-      ,@(flycheck-swiftx--append-options "-I"
-                                      (flycheck-swiftx--list-option 'SYSTEM_HEADER_SEARCH_PATHS
-                                                                     build-settings))
-      ,@(flycheck-swiftx--append-options "-I"
-                                      (flycheck-swiftx--list-option 'SWIFT_INCLUDE_PATHS
-                                                                     build-settings))
-      ;; Add target build dir to ensure that any framework dependencies are found
-      ,@(flycheck-swiftx--append-options "-F" build-products-dir)
-      ,@(flycheck-swiftx--append-options "-I" build-products-dir)
-      ;; Associated source files, ignoring the file currently being checked.
-      ,@(when-let (source-files (flycheck-swiftx--source-files xcproj target-name))
-          (remove file-name source-files)))))
+  (if (eq flycheck-swiftx-project-type 'xcode)
+      (flycheck-swiftx--xcode-options file-name xcrun-path)
+    (let ((build-options flycheck-swiftx-build-options))
+      ;; ensure -sdk is present in build-options
+      (unless (seq-contains build-options "-sdk")
+        (setq build-options (append build-options `("-sdk" ,(flycheck-swiftx--xcrun-sdk-path xcrun-path)))))
+      `(,@build-options
+        ;; Associated source files, ignoring the file currently being checked.
+        ,@(when-let (source-files (flycheck-swiftx--source-files))
+            (remove file-name source-files))))))
+
+(defun flycheck-swiftx--xcode-options (file-name xcrun-path)
+  "Return a list of swiftc command line options for FILE-NAME.
+
+The XCRUN-PATH is used to locate sdks if necessary."
+  (when-let* ((xcproj-path (xcode-project-find-xcodeproj file-name))
+              (xcproj (flycheck-swiftx--load-xcode-project xcproj-path))
+              (target-name (car (xcode-project-target-names-for-file xcproj file-name "PBXSourcesBuildPhase"))))
+    ;; build-settings are optional (though should usually be present).
+    (let ((build-settings (flycheck-swiftx--xcode-build-settings xcproj target-name))
+          (build-products-dir (xcode-project-concat-path (flycheck-swiftx--target-build-dir target-name)
+                                                         "Build/Products"
+                                                         (or flycheck-swiftx-xcode-build-config "Debug"))))
+      `(
+        ,@(flycheck-swiftx--append-options "-module-name" target-name)
+        ,@(flycheck-swiftx--append-options "-target"
+                                           (flycheck-swiftx--target build-settings))
+        ,@(flycheck-swiftx--append-options "-swift-version"
+                                           (flycheck-swiftx--swift-version build-settings))
+        ,@(flycheck-swiftx--append-options "-sdk"
+                                           (flycheck-swiftx--sdk-path build-settings xcrun-path))
+        ,@(flycheck-swiftx--append-options "-import-objc-header"
+                                           (flycheck-swiftx--objc-bridging-header xcproj-path build-settings))
+        ,@(flycheck-swiftx--objc-inference build-settings)
+        ,@(flycheck-swiftx--append-options "-D"
+                                           (flycheck-swiftx--gcc-compilation-flags build-settings))
+        ;; Other compiler flags
+        ,@(flycheck-swiftx--list-option 'OTHER_SWIFT_FLAGS build-settings)
+        ;; Search paths
+        ,@(flycheck-swiftx--append-options "-F"
+                                           (flycheck-swiftx--list-option 'FRAMEWORK_SEARCH_PATHS
+                                                                         build-settings))
+        ,@(flycheck-swiftx--append-options "-I"
+                                           (flycheck-swiftx--list-option 'HEADER_SEARCH_PATHS
+                                                                         build-settings))
+        ,@(flycheck-swiftx--append-options "-I"
+                                           (flycheck-swiftx--list-option 'USER_HEADER_SEARCH_PATHS
+                                                                         build-settings))
+        ,@(flycheck-swiftx--append-options "-I"
+                                           (flycheck-swiftx--list-option 'SYSTEM_HEADER_SEARCH_PATHS
+                                                                         build-settings))
+        ,@(flycheck-swiftx--append-options "-I"
+                                           (flycheck-swiftx--list-option 'SWIFT_INCLUDE_PATHS
+                                                                         build-settings))
+        ;; Add target build dir to ensure that any framework dependencies are found
+        ,@(flycheck-swiftx--append-options "-F" build-products-dir)
+        ,@(flycheck-swiftx--append-options "-I" build-products-dir)
+        ;; Optional, additional build options
+        ,@flycheck-swiftx-build-options
+        ;; Associated source files, ignoring the file currently being checked.
+        ,@(when-let (source-files (flycheck-swiftx--source-files xcproj target-name))
+            (remove file-name source-files))))))
 
 (defun flycheck-swiftx--syntax-checking-command ()
   "Return the command to run for Swift syntax checking."
