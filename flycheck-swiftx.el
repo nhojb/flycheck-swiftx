@@ -56,13 +56,21 @@
 (require 'flycheck)
 (require 'xcode-project)
 
-(flycheck-def-option-var flycheck-swiftx-project-type 'xcode swiftx
+(flycheck-def-option-var flycheck-swiftx-project-type 'automatic swiftx
   "Specify the project type.
 
-When non-nil, specifies how project settings (SDK, compilation flags, source files etc)
+Determines how project settings (SDK, compilation flags, source files etc)
 will be obtained.
-"
-  :type '(choice (const :tag "Xcode project" xcode)
+
+When `automatic' flycheck-swiftx will search for a project as follows:
+  1. An Xcode project in the current buffer's directory or parent directories.
+  2. A .dir-locals.el file current buffer's directory or parent directories.
+  3. Otherwise fall back to using `flycheck-swiftx-build-options' and `flycheck-swiftx-sources'.
+
+In the first two cases the project's root directory is that containing
+the Xcode project or .dir-locals.el."
+  :type '(choice (const :tag "Automatic project detection" automatic)
+                 (const :tag "Xcode project" xcode)
                  (const :tag "None" nil))
   :safe #'symbolp)
 
@@ -84,8 +92,8 @@ The option is available only on macOS."
 (flycheck-def-option-var flycheck-swiftx-build-options nil swiftx
   "An list of of swiftc build options.
 
-When flycheck-swiftx-project-type is 'xcode these build options
-are additional to the project's options.
+If an Xcode project is found, these build options
+are additional to the Xcode project's options.
 
 May be specified as a dir local variable in the project's root."
   :type '(repeat (string :tag "Build option"))
@@ -94,7 +102,7 @@ May be specified as a dir local variable in the project's root."
 (flycheck-def-option-var flycheck-swiftx-sources nil swiftx
   "Specify sources files/directory to parse.
 
-Ignored if flycheck-swiftx-project-type is 'xcode.
+Ignored if source files are obtained from an Xcode project.
 
 When `flycheck-swiftx-sources' is a single directory, flycheck-swiftx will recursively
 include all .swift files found in the directory.
@@ -325,29 +333,35 @@ Return nil if options is nil."
 (defun flycheck-swiftx--swiftc-options (file-name xcrun-path)
   "Return a list of swiftc command line options for FILE-NAME.
 
-When `flycheck-swiftx-project-type' is `xcode' then use the associated
-Xcode project's build settings to determine command line options.
+When `flycheck-swiftx-project-type' is `automatic' or `xcode' then use the
+associated Xcode project's build settings to determine command line options.
 
 The XCRUN-PATH is used to locate sdks if necessary.
 
 Otherwise fall back to the flycheck-swiftx custom options."
-  (if (eq flycheck-swiftx-project-type 'xcode)
-      (flycheck-swiftx--xcode-options file-name xcrun-path)
-    (let ((build-options flycheck-swiftx-build-options))
-      ;; ensure -sdk is present in build-options
-      (unless (seq-contains build-options "-sdk")
-        (setq build-options (append build-options `("-sdk" ,(flycheck-swiftx--xcrun-sdk-path xcrun-path)))))
-      `(,@build-options
-        ;; Associated source files, ignoring the file currently being checked.
-        ,@(when-let (source-files (flycheck-swiftx--source-files))
-            (remove file-name source-files))))))
+  (let ((xcproj-path (when (or (eq flycheck-swiftx-project-type 'automatic)
+                               (eq flycheck-swiftx-project-type 'xcode))
+                       (xcode-project-find-xcodeproj file-name))))
+    (if (and xcproj-path (file-directory-p xcproj-path))
+        (flycheck-swiftx--xcode-options xcproj-path file-name xcrun-path)
+      (unless (eq flycheck-swiftx-project-type 'xcode)
+        (let ((build-options flycheck-swiftx-build-options))
+          ;; ensure -sdk is present in build-options
+          (unless (seq-contains build-options "-sdk")
+            (setq build-options (append build-options `("-sdk" ,(flycheck-swiftx--sdk-path nil xcrun-path)))))
+          `(,@build-options
+            ;; Associated source files, ignoring the file currently being checked.
+            ,@(when-let (source-files (flycheck-swiftx--source-files))
+                (remove file-name source-files))))))))
 
-(defun flycheck-swiftx--xcode-options (file-name xcrun-path)
-  "Return a list of swiftc command line options for FILE-NAME.
+(defun flycheck-swiftx--xcode-options (xcproj-path file-name xcrun-path)
+  "Return a list of swiftc options obtained from the XCPROJ-PATH.
+
+FILE-NAME should be part of the project and is used to determine
+the current target.  Only the first target found is used.
 
 The XCRUN-PATH is used to locate sdks if necessary."
-  (when-let* ((xcproj-path (xcode-project-find-xcodeproj file-name))
-              (xcproj (flycheck-swiftx--load-xcode-project xcproj-path))
+  (when-let* ((xcproj (flycheck-swiftx--load-xcode-project xcproj-path))
               (target-name (car (xcode-project-target-names-for-file xcproj file-name "PBXSourcesBuildPhase"))))
     ;; build-settings are optional (though should usually be present).
     (let ((build-settings (flycheck-swiftx--xcode-build-settings xcproj target-name))
