@@ -240,10 +240,10 @@ Uses heuristics to locate the build dir in ~/Library/Developer/Xcode/DerivedData
 
 (defun flycheck-swiftx--sdk-path (xcrun-path &optional build-settings)
   "Return the platform sdk for BUILD-SETTINGS.
-If no valid sdk is found, return flycheck-swiftx--xcrun-sdk-path using
+If no valid sdk is found, return `flycheck-swiftx--xcrun-sdk-path' using
 XCRUN-PATH.
 
-If BUILD-SETTINGS is nil return flycheck-swiftx--xcrun-sdk-path."
+If BUILD-SETTINGS is nil return `flycheck-swiftx--xcrun-sdk-path'."
   (let ((sdk-root (or (alist-get 'SDKROOT build-settings)
                       flycheck-swiftx-sdk)))
     (when (equal sdk-root "iphoneos")
@@ -296,10 +296,12 @@ input files using `DIRECTORY' as the default directory."
                       (file-expand-wildcards
                        (expand-file-name input directory) t)))))))
 
-(defun flycheck-swiftx--objc-bridging-header (xcproj-path build-settings)
-  "Return path to Objc bridging header if found in BUILD-SETTINGS."
+(defun flycheck-swiftx--objc-bridging-header (build-settings xcproj-path)
+  "Return path to Objc bridging header if found in BUILD-SETTINGS.
+
+Header path is interpreted relative to XCPROJ-PATH."
   (when-let (header (flycheck-swiftx--string-option 'SWIFT_OBJC_BRIDGING_HEADER build-settings))
-    (concat (file-name-directory xcproj-path) header)))
+    (expand-file-name header (file-name-directory xcproj-path))))
 
 (defun flycheck-swiftx--objc-inference (build-settings)
   "Return objc inference compiler flags for BUILD-SETTINGS."
@@ -390,7 +392,7 @@ The XCRUN-PATH is used to locate sdks if necessary."
         ,@(flycheck-swiftx--append-options "-sdk"
                                            (flycheck-swiftx--sdk-path xcrun-path build-settings))
         ,@(flycheck-swiftx--append-options "-import-objc-header"
-                                           (flycheck-swiftx--objc-bridging-header xcproj-path build-settings))
+                                           (flycheck-swiftx--objc-bridging-header build-settings xcproj-path))
         ,@(flycheck-swiftx--objc-inference build-settings)
         ,@(flycheck-swiftx--append-options "-D"
                                            (flycheck-swiftx--gcc-compilation-flags build-settings))
