@@ -233,13 +233,12 @@ Uses heuristics to locate the build dir in ~/Library/Developer/Xcode/DerivedData
 (defun flycheck-swiftx--xcrun-sdk-path (xcrun-path &optional xcrun-sdk)
   "Return the swift SDK path using `${XCRUN-PATH} --sdk ${XCRUN-SDK} --show-sdk-path'."
   (when xcrun-path
-    (let ((command
-           (if xcrun-sdk
-               (mapconcat #'identity `(,xcrun-path "--sdk" ,xcrun-sdk "--show-sdk-path") " ")
-             (mapconcat #'identity `(,xcrun-path "--show-sdk-path") " "))))
-      (string-trim (shell-command-to-string command)))))
+      (string-trim (shell-command-to-string
+                (if xcrun-sdk
+                    (format "%s --sdk %s --show-sdk-path" xcrun-path xcrun-sdk)
+                  (format "%s --show-sdk-path" xcrun-path))))))
 
-(defun flycheck-swiftx--sdk-path (build-settings xcrun-path)
+(defun flycheck-swiftx--sdk-path (xcrun-path &optional build-settings)
   "Return the platform sdk for BUILD-SETTINGS.
 If no valid sdk is found, return flycheck-swiftx--xcrun-sdk-path using
 XCRUN-PATH.
@@ -274,10 +273,13 @@ Otherwise returns all .swift file specified by `flycheck-swiftx-sources'."
         ((and (stringp flycheck-swiftx-sources)
               (file-directory-p flycheck-swiftx-sources))
          (flycheck-swiftx--list-swift-files flycheck-swiftx-sources))
-        ((listp flycheck-swiftx-sources)
-         (let ((directory-name (file-name-directory
+        (flycheck-swiftx-sources
+         (let ((inputs flycheck-swiftx-sources)
+               (directory-name (file-name-directory
                                 (or load-file-name buffer-file-name))))
-           (flycheck-swiftx--expand-inputs flycheck-swiftx-sources directory-name)))))
+           (unless (listp inputs)
+             (setq inputs (list inputs)))
+           (flycheck-swiftx--expand-inputs inputs directory-name)))))
 
 (defun flycheck-swiftx--expand-inputs (inputs &optional directory)
   "Return the expanded inputs.
@@ -359,7 +361,7 @@ Otherwise fall back to the flycheck-swiftx custom options."
         (let ((build-options flycheck-swiftx-build-options))
           ;; ensure -sdk is present in build-options
           (unless (seq-contains build-options "-sdk")
-            (setq build-options (append build-options `("-sdk" ,(flycheck-swiftx--sdk-path nil xcrun-path)))))
+            (setq build-options (append build-options `("-sdk" ,(flycheck-swiftx--sdk-path xcrun-path)))))
           `(,@build-options
             ;; Associated source files, ignoring the file currently being checked.
             ,@(when-let (source-files (flycheck-swiftx--source-files))
@@ -386,7 +388,7 @@ The XCRUN-PATH is used to locate sdks if necessary."
         ,@(flycheck-swiftx--append-options "-swift-version"
                                            (flycheck-swiftx--swift-version build-settings))
         ,@(flycheck-swiftx--append-options "-sdk"
-                                           (flycheck-swiftx--sdk-path build-settings xcrun-path))
+                                           (flycheck-swiftx--sdk-path xcrun-path build-settings))
         ,@(flycheck-swiftx--append-options "-import-objc-header"
                                            (flycheck-swiftx--objc-bridging-header xcproj-path build-settings))
         ,@(flycheck-swiftx--objc-inference build-settings)
