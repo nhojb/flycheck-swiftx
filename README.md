@@ -10,13 +10,14 @@ A Swift syntax checker using Swift compiler frontend, with support for Xcode pro
   If you use the toolchain option, you can use the old version of Swift.
 
 * Xcode projects
-  Flycheck-swiftx can parse Xcode projects and use the build settings for the project.
-  This means that complex projects, which include various dependencies, can still be typechecked successfully
-  with the swiftc compiler.
-  
-* For non-Xcode projects provide your own build settings via a .flycheck-swiftx file in the project's root.
 
-* The `xcrun` command support (only on macOS)
+  Flycheck-swiftx can parse Xcode projects and use the build settings for the project.
+  This means that complex projects, which may include various dependencies, can still be
+  typechecked with swiftc.
+
+* For non-Xcode projects provide your own configuration via `flycheck-swiftx-build-options` and `flycheck-swiftx-sources`.
+
+* `xcrun` command support (only on macOS)
 
 ## Requirements
 
@@ -26,12 +27,12 @@ A Swift syntax checker using Swift compiler frontend, with support for Xcode pro
 
 You can install `flycheck-swiftx.el` from the [MELPA](https://melpa.org/) or the [MELPA Stable](https://stable.melpa.org/) repository with `package.el`.
 
-In your `init.el`:
+In your `init.el`
 
 ```elisp
-(require 'flycheck-swiftx) ; Not necessary if using ELPA package
+;; Not necessary if using MELPA package
 (with-eval-after-load 'flycheck
-  (add-hook 'flycheck-mode-hook #'flycheck-swift3-setup))
+  (require 'flycheck-swiftx))
 ```
 
 or with `use-package`:
@@ -41,15 +42,33 @@ or with `use-package`:
   :after flycheck)
 ```
 
+## Configuration
+
+* `flycheck-swiftx-project-type` is set to `'automatic` by default.
+  In this mode flycheck-swiftx will search for an Xcode project in the current buffer's directory, or a parent directory.
+  If not found it will fall back to using the current flycheck-swiftx configuration.
+
+  Other options are:
+  - `'xcode`, which will cause swiftc to fail if no Xcode project is found.
+  - `nil` which forces flycheck-swiftx to use the current flycheck-swiftx configuration only.
+
+* `flycheck-swiftx-build-options` can be used to provide command line arguments for swiftc.
+
+* `flycheck-swiftx-sources` can be used to specify a single source directory or list of source files for the project.
+
+*  Configuration variables can be specified via a `.dir-locals.el` placed in the project's root directory.
+
 ## FAQ
 
 * Why is there no support for Swift Packages?
-If your project uses a swift packages you should probably use [lsp-mode](https://github.com/emacs-lsp/lsp-mode) with a sourcekit-lsp backend.
-However, for many complex/existing projects, Xcode is still necessary - and swift packages are often not sufficient - hence flycheck-swiftx.
+
+  If your project uses a swift packages you should probably use [lsp-mode](https://github.com/emacs-lsp/lsp-mode) with a sourcekit-lsp backend.
+  However, for many complex/existing projects, Xcode is still necessary - and swift packages are often not sufficient - hence flycheck-swiftx.
 
 * What about flycheck-swift3?
-flymake-swiftx is a hard fork of [flycheck-swift3](https://github.com/GyazSquare/flycheck-swift3). The latter does not support Xcode projects.
-I submitted a PR, which has not been merged, so in the end I decided to create my own fork and submit it to MELPA.
+
+  Flymake-swiftx is a hard fork of [flycheck-swift3](https://github.com/GyazSquare/flycheck-swift3). The latter does not support Xcode projects.
+  I submitted a PR, which has not been merged, so in the end decided to create my own fork and submit it to MELPA.
 
 ## License
 
