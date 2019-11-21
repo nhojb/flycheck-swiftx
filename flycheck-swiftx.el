@@ -6,7 +6,7 @@
 ;; URL: https://github.com/nhojb/flycheck-swiftx
 ;; Version: 1.0.0
 ;; Keywords: convenience, languages, tools
-;; Package-Requires: ((emacs "24.4") (flycheck "26"))
+;; Package-Requires: ((emacs "26") (flycheck "26"))
 
 ;; This file is not part of GNU Emacs.
 
@@ -44,10 +44,10 @@
 ;;
 ;; Usage:
 ;;
-;; (with-eval-after-load 'flycheck
-;;   (require 'flycheck-swiftx))
+;; See README.md
 ;;
 ;; Debug:
+;;
 ;; In flycheck.el:flycheck-start-command-checker, add:
 ;; (when (equal checker 'swiftx) (message "%s %s" checker args))
 
