@@ -308,7 +308,7 @@ input files using `DIRECTORY' as the default directory."
            '("-enable-swift3-objc-inference"
              "-warn-swift3-objc-inference-minimal"))
           ((equal objc-inference "Off")
-           "-disable-swift3-objc-inference"))))
+           '("-disable-swift3-objc-inference")))))
 
 (defun flycheck-swiftx--gcc-compilation-flags (build-settings)
   "Return a list of GCC conditional compilation flags found in BUILD-SETTINGS."
