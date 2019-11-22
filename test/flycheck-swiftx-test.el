@@ -309,6 +309,10 @@
                        "-g"
                        ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift")))))))
 
+(flycheck-ert-def-checker-test swiftx swift find-xcodeproj
+  (should (equal (flycheck-swiftx--find-xcodeproj (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))
+                 (flycheck-swiftx-test--expand-file-name "TestApp/TestApp.xcodeproj"))))
+
 ;; Helpers
 
 (defun flycheck-swiftx-test--expand-file-name (file-name)

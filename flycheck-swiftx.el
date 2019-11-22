@@ -153,6 +153,21 @@ Otherwise return the previously used cache directory."
 
 ;; Xcode project support
 
+(defun flycheck-swiftx--find-xcodeproj (file-name)
+  "Search FILE-NAME directory and parent directories for a Xcode project file.
+
+Prefers an Xcode project with the same name as FILE-NAME's parent directory."
+  (let* (projects
+         (directory (file-name-directory file-name))
+         (base-name (format "%s.xcodeproj" (directory-file-name directory))))
+    (when (file-directory-p directory)
+      (while (and (not projects) (not (equal directory "/")))
+        (setq projects (directory-files directory t ".*\.xcodeproj$" t))
+        (setq directory (file-name-directory (directory-file-name directory)))))
+    ;; Prefer project matching "<base-name>.xcodeproj"
+    (or (seq-find (lambda (path) (equal path base-name)) projects)
+        (car projects))))
+
 (defun flycheck-swiftx--xcodeproj-modtime (xcproj-path)
   "Return the modification time for XCPROJ-PATH."
   (setq xcproj-path (expand-file-name xcproj-path))
@@ -356,7 +371,7 @@ The XCRUN-PATH is used to locate sdks if necessary.
 Otherwise fall back to the flycheck-swiftx custom options."
   (let ((xcproj-path (when (or (eq flycheck-swiftx-project-type 'automatic)
                                (eq flycheck-swiftx-project-type 'xcode))
-                       (xcode-project-find-xcodeproj file-name))))
+                       (flycheck-swiftx--find-xcodeproj file-name))))
     (if (and xcproj-path (file-directory-p xcproj-path))
         (flycheck-swiftx--xcode-options xcproj-path file-name xcrun-path)
       (unless (eq flycheck-swiftx-project-type 'xcode)
