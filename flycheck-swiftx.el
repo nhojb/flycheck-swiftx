@@ -429,6 +429,9 @@ The XCRUN-PATH is used to locate sdks if necessary."
         ,@(flycheck-swiftx--append-options "-I"
                                            (flycheck-swiftx--list-option 'SWIFT_INCLUDE_PATHS
                                                                          build-settings))
+        ,@(flycheck-swiftx--append-options "-F"
+                                           (seq-map (lambda (path) (concat (file-name-as-directory path) "Library/Frameworks"))
+                                                    (flycheck-swiftx--list-option 'ADDITIONAL_SDKS build-settings)))
         ;; Add target build dir to ensure that any framework dependencies are found
         ,@(flycheck-swiftx--append-options "-F" build-products-dir)
         ,@(flycheck-swiftx--append-options "-I" build-products-dir)
