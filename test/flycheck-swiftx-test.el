@@ -295,19 +295,23 @@
     ;; missing project
     (should-not (flycheck-swiftx--swiftc-options (flycheck-swiftx-test--expand-file-name "A.swift") xcrun-path))
     ;; valid project
-    (let* ((test-file (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/AppDelegate.swift")))
-      (should (equal (flycheck-swiftx--swiftc-options test-file xcrun-path)
-                     `("-module-name" "TestApp"
-                       "-target" "x86_64-apple-macosx10.14"
-                       "-swift-version" "5"
-                       "-sdk"
-                       ,(flycheck-swiftx-test--sdk-path "macosx")
-                       "-import-objc-header" ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/TestApp-Bridging-Header.h")
-                       "-disable-swift3-objc-inference"
-                       "-D" "DEBUG=1"
-                       "-warn-implicit-overrides"
-                       "-g"
-                       ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift")))))))
+    (let* ((test-file (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/AppDelegate.swift"))
+           (target-build-dir (flycheck-swiftx--target-build-dir "TestApp")))
+      (should
+       (equal (flycheck-swiftx--swiftc-options test-file xcrun-path)
+              `("-module-name" "TestApp"
+                "-target" "x86_64-apple-macosx10.14"
+                "-swift-version" "5"
+                "-sdk"
+                ,(flycheck-swiftx-test--sdk-path "macosx")
+                "-import-objc-header" ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/TestApp-Bridging-Header.h")
+                "-disable-swift3-objc-inference"
+                "-D" "DEBUG=1"
+                "-warn-implicit-overrides"
+                "-g"
+                ,@(flycheck-swiftx--append-options "-F" (when target-build-dir (concat target-build-dir "/Build/Products/Debug")))
+                ,@(flycheck-swiftx--append-options "-I" (when target-build-dir (concat target-build-dir "/Build/Products/Debug")))
+                ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift")))))))
 
 (flycheck-ert-def-checker-test swiftx swift find-xcodeproj
   (should (equal (flycheck-swiftx--find-xcodeproj (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))
