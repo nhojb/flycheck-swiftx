@@ -6,7 +6,7 @@
 ;; URL: https://github.com/nhojb/flycheck-swiftx
 ;; Version: 1.0.1
 ;; Keywords: convenience, languages, tools
-;; Package-Requires: ((emacs "26") (flycheck "26") (xcode-project "1.0"))
+;; Package-Requires: ((emacs "26.1") (flycheck "26") (xcode-project "1.0"))
 
 ;; This file is not part of GNU Emacs.
 
