@@ -225,30 +225,30 @@
 
 (flycheck-ert-def-checker-test swiftx swift xcrun-sdk-path
   "Test flycheck-swiftx--xcrun-sdk-path."
-    (when-let ((xcrun-path (executable-find "xcrun")))
+    (when (executable-find "xcrun")
       (should
-       (equal (flycheck-swiftx--xcrun-sdk-path xcrun-path "macosx") (flycheck-swiftx-test--sdk-path "macosx")))
+       (equal (flycheck-swiftx--xcrun-sdk-path "macosx") (flycheck-swiftx-test--sdk-path "macosx")))
       (should
-       (equal (flycheck-swiftx--xcrun-sdk-path xcrun-path "iphoneos") (flycheck-swiftx-test--sdk-path "iphoneos")))
+       (equal (flycheck-swiftx--xcrun-sdk-path "iphoneos") (flycheck-swiftx-test--sdk-path "iphoneos")))
       (should
-       (equal (flycheck-swiftx--xcrun-sdk-path xcrun-path "iphonesimulator") (flycheck-swiftx-test--sdk-path "iphonesimulator")))))
+       (equal (flycheck-swiftx--xcrun-sdk-path "iphonesimulator") (flycheck-swiftx-test--sdk-path "iphonesimulator")))))
 
 (flycheck-ert-def-checker-test swiftx swift sdk-path
   "Test flycheck-swiftx--sdk-path."
-  (when-let ((xcrun-path (executable-find "xcrun")))
+  (when (executable-find "xcrun")
     (should
      ;; macosx sdk - note `xcrun --show-sdk-path' returns SDK path without version.
      ;; `xcrun -sdk macosx --show-sdk-path' returns SDK with version!
-     (equal (flycheck-swiftx--sdk-path xcrun-path) (flycheck-swiftx-test--sdk-path)))
+     (equal (flycheck-swiftx--sdk-path) (flycheck-swiftx-test--sdk-path)))
     (let ((flycheck-swiftx-sdk "macosx"))
       (should
-       (equal (flycheck-swiftx--sdk-path xcrun-path) (flycheck-swiftx-test--sdk-path "macosx"))))
+       (equal (flycheck-swiftx--sdk-path) (flycheck-swiftx-test--sdk-path "macosx"))))
     (let ((flycheck-swiftx-sdk "iphoneos"))
       (should
-       (equal (flycheck-swiftx--sdk-path xcrun-path) (flycheck-swiftx-test--sdk-path "iphonesimulator"))))
+       (equal (flycheck-swiftx--sdk-path) (flycheck-swiftx-test--sdk-path "iphonesimulator"))))
     (let ((flycheck-swiftx-sdk "iphonesimulator"))
       (should
-       (equal (flycheck-swiftx--sdk-path xcrun-path) (flycheck-swiftx-test--sdk-path "iphonesimulator"))))))
+       (equal (flycheck-swiftx--sdk-path) (flycheck-swiftx-test--sdk-path "iphonesimulator"))))))
 
 (flycheck-ert-def-checker-test swiftx swift source-files
   "Test flycheck-swiftx--source-files with no Xcode project."
@@ -274,44 +274,44 @@
 
 (flycheck-ert-def-checker-test swiftx swift swiftc-options
   (let ((flycheck-swiftx-project-type 'automatic)
-        (test-file (flycheck-swiftx-test--expand-file-name "A.swift"))
-        (xcrun-path (executable-find "xcrun")))
+        (test-file (flycheck-swiftx-test--expand-file-name "A.swift")))
     (flycheck-ert-with-file-buffer test-file
       ;; no options
-      (should (equal (flycheck-swiftx--swiftc-options test-file xcrun-path)
+      (should (equal (flycheck-swiftx--swiftc-options)
                      `("-sdk" ,(flycheck-swiftx-test--sdk-path))))
       ;; sdk and build-options
       (let ((flycheck-swiftx-sdk "iphoneos")
             (flycheck-swiftx-build-options '("-swift-version" "4"
                                              "-F" "/Library/Developer/Frameworks")))
-        (should (equal (flycheck-swiftx--swiftc-options test-file xcrun-path)
+        (should (equal (flycheck-swiftx--swiftc-options)
                        `(,@flycheck-swiftx-build-options
                          "-sdk"
                          ,(flycheck-swiftx-test--sdk-path "iphonesimulator"))))))))
 
 (flycheck-ert-def-checker-test swiftx swift swiftc-options-xcode
-  (let ((flycheck-swiftx-project-type 'xcode)
-        (xcrun-path (executable-find "xcrun")))
+  (let ((flycheck-swiftx-project-type 'xcode))
     ;; missing project
-    (should-not (flycheck-swiftx--swiftc-options (flycheck-swiftx-test--expand-file-name "A.swift") xcrun-path))
+    (flycheck-ert-with-file-buffer (flycheck-swiftx-test--expand-file-name "A.swift")
+      (should-not (flycheck-swiftx--swiftc-options)))
     ;; valid project
     (let* ((test-file (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/AppDelegate.swift"))
            (target-build-dir (flycheck-swiftx--target-build-dir "TestApp")))
-      (should
-       (equal (flycheck-swiftx--swiftc-options test-file xcrun-path)
-              `("-module-name" "TestApp"
-                "-target" "x86_64-apple-macosx10.14"
-                "-swift-version" "5"
-                "-sdk"
-                ,(flycheck-swiftx-test--sdk-path "macosx")
-                "-import-objc-header" ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/TestApp-Bridging-Header.h")
-                "-disable-swift3-objc-inference"
-                "-D" "DEBUG=1"
-                "-warn-implicit-overrides"
-                "-g"
-                ,@(flycheck-swiftx--append-options "-F" (when target-build-dir (concat target-build-dir "/Build/Products/Debug")))
-                ,@(flycheck-swiftx--append-options "-I" (when target-build-dir (concat target-build-dir "/Build/Products/Debug")))
-                ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift")))))))
+      (flycheck-ert-with-file-buffer test-file
+        (should
+         (equal (flycheck-swiftx--swiftc-options)
+                `("-module-name" "TestApp"
+                  "-target" "x86_64-apple-macosx10.14"
+                  "-swift-version" "5"
+                  "-sdk"
+                  ,(flycheck-swiftx-test--sdk-path "macosx")
+                  "-import-objc-header" ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/TestApp-Bridging-Header.h")
+                  "-disable-swift3-objc-inference"
+                  "-D" "DEBUG=1"
+                  "-warn-implicit-overrides"
+                  "-g"
+                  ,@(flycheck-swiftx--append-options "-F" (when target-build-dir (concat target-build-dir "/Build/Products/Debug")))
+                  ,@(flycheck-swiftx--append-options "-I" (when target-build-dir (concat target-build-dir "/Build/Products/Debug")))
+                  ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))))))))
 
 (flycheck-ert-def-checker-test swiftx swift find-xcodeproj
   (should (equal (flycheck-swiftx--find-xcodeproj (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))
