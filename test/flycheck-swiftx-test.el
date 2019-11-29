@@ -317,6 +317,17 @@
   (should (equal (flycheck-swiftx--find-xcodeproj (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))
                  (flycheck-swiftx-test--expand-file-name "TestApp/TestApp.xcodeproj"))))
 
+(flycheck-ert-def-checker-test swiftx swift project-root
+  ;; no project
+  (should (equal (flycheck-swiftx--project-root (flycheck-swiftx-test--expand-file-name "A.swift"))
+                 flycheck-swiftx-test-directory))
+  ;; xode project
+  (should (equal (flycheck-swiftx--project-root (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/AppDelegate.swift"))
+                 (flycheck-swiftx-test--expand-file-name "TestApp/")))
+  ;; swift package
+  (should (equal (flycheck-swiftx--project-root (flycheck-swiftx-test--expand-file-name "Hello/Sources/Hello/main.swift"))
+                 (flycheck-swiftx-test--expand-file-name "Hello/"))))
+
 ;; Helpers
 
 (defun flycheck-swiftx-test--expand-file-name (file-name)

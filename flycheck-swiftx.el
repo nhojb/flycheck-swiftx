@@ -271,6 +271,20 @@ If BUILD-SETTINGS is nil return `flycheck-swiftx--xcrun-sdk-path'."
    (lambda (elt) (eq 0 (string-match-p "[^\.].*" (file-name-nondirectory elt))))
    (directory-files-recursively directory ".*\.swift$")))
 
+(defun flycheck-swiftx--project-root (file-name)
+  "Return the project root directory for FILE-NAME.
+
+Searches for a Xcode project or Package.swift in FILE-NAME's
+directory or parent directories.
+Otherwise return FILE-NAME's directory."
+  (if-let ((xcproj-path (when (or (eq flycheck-swiftx-project-type 'automatic)
+                                  (eq flycheck-swiftx-project-type 'xcode))
+                          (xcode-project-find-xcodeproj file-name))))
+      (file-name-directory (directory-file-name xcproj-path))
+    (if-let ((package-dir (locate-dominating-file file-name "Package.swift")))
+        (expand-file-name package-dir)
+      (file-name-directory file-name))))
+
 (defun flycheck-swiftx--source-files (&optional xcproj target-name)
   "Return the swift source files associated with the current buffer.
 
@@ -285,16 +299,16 @@ Otherwise returns all .swift file specified by `flycheck-swiftx-sources'."
                                          (lambda (file)
                                            (xcode-project-file-ref-extension-p file "swift"))
                                          'absolute))
-        ((and (stringp flycheck-swiftx-sources)
-              (file-directory-p flycheck-swiftx-sources))
-         (flycheck-swiftx--list-swift-files flycheck-swiftx-sources))
-        (flycheck-swiftx-sources
-         (let ((inputs flycheck-swiftx-sources)
-               (directory-name (file-name-directory
-                                (or load-file-name buffer-file-name))))
-           (unless (listp inputs)
-             (setq inputs (list inputs)))
-           (flycheck-swiftx--expand-inputs inputs directory-name)))))
+         ((and (stringp flycheck-swiftx-sources)
+               (file-directory-p flycheck-swiftx-sources))
+          (flycheck-swiftx--list-swift-files flycheck-swiftx-sources))
+         (flycheck-swiftx-sources
+          (let ((inputs flycheck-swiftx-sources)
+                (directory-name (file-name-directory
+                                 (or load-file-name buffer-file-name))))
+            (unless (listp inputs)
+              (setq inputs (list inputs)))
+            (flycheck-swiftx--expand-inputs inputs directory-name)))))
 
 (defun flycheck-swiftx--expand-inputs (inputs &optional directory)
   "Return the expanded inputs.
@@ -479,6 +493,8 @@ See URL `https://swift.org/'."
                     (error line-start (or "<stdin>" (file-name)) ":" line ":" column
                            ": " "error: " (optional (message)) line-end))
   :error-filter 'flycheck-swiftx--error-filter
+  ;; Ensure paths (e.g flycheck-swiftx-sources) are interpreted relative to project's root directory.
+  :working-directory '(lambda (checker) (flycheck-swiftx--project-root (or load-file-name buffer-file-name)))
   :modes 'swift-mode)
 
 ;; Set up Flycheck for Swift.
