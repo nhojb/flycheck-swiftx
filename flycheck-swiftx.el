@@ -173,7 +173,7 @@ Prefers an Xcode project with the same name as FILE-NAME's parent directory."
          (base-name (format "%s.xcodeproj" (directory-file-name directory))))
     (when (file-directory-p directory)
       (while (and (not projects) (not (equal directory "/")))
-        (setq projects (directory-files directory t ".*\.xcodeproj$" t))
+        (setq projects (directory-files directory t ".*\\.xcodeproj$" t))
         (setq directory (file-name-directory (directory-file-name directory)))))
     ;; Prefer project matching "<base-name>.xcodeproj"
     (or (seq-find (lambda (path) (equal path base-name)) projects)
@@ -279,8 +279,8 @@ If BUILD-SETTINGS is nil return `flycheck-swiftx--xcrun-sdk-path'."
 (defun flycheck-swiftx--list-swift-files (directory)
   "Return list of full paths to swift files in the specified DIRECTORY."
   (seq-filter
-   (lambda (elt) (eq 0 (string-match-p "[^\.].*" (file-name-nondirectory elt))))
-   (directory-files-recursively directory ".*\.swift$")))
+   (lambda (elt) (eq 0 (string-match-p "[^\\.].*" (file-name-nondirectory elt))))
+   (directory-files-recursively directory ".*\\.swift$")))
 
 (defun flycheck-swiftx--project-root (file-name)
   "Return the project root directory for FILE-NAME.
