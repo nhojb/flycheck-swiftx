@@ -127,16 +127,36 @@ May be specified as a dir local variable in the project's root."
 
 Ignored if source files are obtained from an Xcode project.
 
-When `flycheck-swiftx-sources' is a single directory, flycheck-swiftx will recursively
-include all .swift files found in the directory.
-
-When `flycheck-swiftx-sources' is a list of file paths, include these as-is.
+- When `flycheck-swiftx-sources' is a single directory, flycheck-swiftx will
+  recursively include all .swift files found in the directory.
+- When `flycheck-swiftx-sources' is a list of file paths, include these as-is.
 
 Paths may be absolute or specified relative to the project's root directory.
-
 May be specified as a dir local variable in the project's root."
   :type '(repeat (string :tag "Source directory or file list"))
   :safe #'flycheck-string-list-p)
+
+(flycheck-def-option-var flycheck-swiftx-project-target nil swiftx
+  "Specify the target to use when extracting build settings from a project.
+
+Ignored if no project is found or the target is not valid.
+May be specified as a dir local variable in the project's root."
+  :type 'string
+  :safe #'stringp)
+
+(flycheck-def-option-var flycheck-swiftx-build-env
+    '((LOCAL_DEVELOPER_DIR . "/Library/Developer")
+      (LOCAL_LIBRARY_DIR . "/Library"))
+    swiftx
+  "An alist of environment variables to apply to build settings.
+
+For example: LOCAL_DEVELOPER_DIR, LOCAL_LIBRARY_DIR, etc
+
+A default set of standard env variables are provided.
+
+May be specified as a dir local variable in the project's root."
+  :type '(repeat (string :tag "Environment var"))
+  :safe #'listp)
 
 (defvar flycheck-swiftx--cache-directory nil
   "The cache directory for `flycheck-swiftx'.")
@@ -218,6 +238,26 @@ Otherwise read from disk, cache and return the project."
           (flycheck-swiftx--write-xcode-project-cache proj xcproj-path)
           proj))))
 
+(defconst flycheck-swiftx--test-re "[tT]ests?$"
+  "Regular expression used to match test files or targets.")
+
+(defun flycheck-swiftx--maybe-test (file-name)
+  "Return t if FILE-NAME is probably a test file."
+  (or (string-match-p flycheck-swiftx--test-re (file-name-base file-name))
+        (string-match-p flycheck-swiftx--test-re (directory-file-name (file-name-directory file-name)))))
+
+(defun flycheck-swiftx--target-name (file-name xcproj)
+  "Return the most appropriate XCPROJ target for FILE-NAME."
+  (let* ((targets (xcode-project-target-names-for-file xcproj file-name "PBXSourcesBuildPhase"))
+         (prefer-tests (flycheck-swiftx--maybe-test file-name)))
+    (if (member flycheck-swiftx-project-target targets)
+        flycheck-swiftx-project-target
+      (seq-find (lambda (target) (if prefer-tests
+                                     (string-match-p flycheck-swiftx--test-re target)
+                                   (not (string-match-p flycheck-swiftx--test-re target))))
+                targets
+                (car targets)))))
+
 (defun flycheck-swiftx--xcode-build-settings (xcproj target-name)
   "Return the build settings for the specified XCPROJ and TARGET-NAME."
   (let ((config-name (or flycheck-swiftx-xcode-build-config "Debug")))
@@ -225,7 +265,7 @@ Otherwise read from disk, cache and return the project."
       (alist-get 'buildSettings (xcode-project-build-config xcproj
                                                             config-name
                                                             target-name)))))
-(defun flycheck-swiftx--target (build-settings)
+(defun flycheck-swiftx--deployment-target (build-settings)
   "Return the platform target for BUILD-SETTINGS."
   (when build-settings
       (let ((macos-target (alist-get 'MACOSX_DEPLOYMENT_TARGET build-settings))
@@ -245,36 +285,52 @@ Otherwise read from disk, cache and return the project."
         (number-to-string (truncate swift-version))
       (number-to-string swift-version))))
 
-(defun flycheck-swiftx--target-build-dir (target-name)
-  "Return the target build dir for TARGET-NAME.
+(defun flycheck-swiftx--target-build-dir (target-name xcproj-path)
+  "Return the target build dir for TARGET-NAME and XCPROJ-PATH.
 Uses heuristics to locate the build dir in ~/Library/Developer/Xcode/DerivedData/."
   (let* ((build-root (expand-file-name "~/Library/Developer/Xcode/DerivedData/"))
          (results (directory-files-and-attributes build-root t (concat target-name "\\-[a-z]+"))))
+    (unless results
+      ;; Check for a xcworkspace in current/parent directory:
+      (when-let (xcworkspace (flycheck-swiftx--find-xcworkspace (file-name-directory xcproj-path)))
+        (setq target-name (file-name-base xcworkspace))
+        (setq results (directory-files-and-attributes build-root (concat target-name "\\-[a-z]+")))))
     (car (seq-reduce (lambda (result item)
                        (if (time-less-p (nth 6 result) (nth 6 item))
                            item
                          result))
                      results (car results)))))
 
-(defun flycheck-swiftx--xcrun-sdk-path (&optional xcrun-sdk)
-  "Return the swift SDK path using `xcrun --sdk ${XCRUN-SDK} --show-sdk-path'."
-  (when-let (xcrun-path (executable-find "xcrun"))
+(defun flycheck-swiftx--xcrun-sdk-path (path-type &optional xcrun-sdk)
+  "Return a path from `xcrun --sdk ${XCRUN-SDK} ${PATH-TYPE}'."
+  (when-let ((xcrun-path (executable-find "xcrun"))
+             (xcrun-cmd (if (eq path-type 'platform)
+                            "--show-sdk-platform-path"
+                          "--show-sdk-path")))
       (string-trim (shell-command-to-string
-                (if xcrun-sdk
-                    (format "%s --sdk %s --show-sdk-path" xcrun-path xcrun-sdk)
-                  (format "%s --show-sdk-path" xcrun-path))))))
+                    (format "%s %s %s" xcrun-path xcrun-cmd
+                            (if xcrun-sdk (format "--sdk %s" xcrun-sdk) ""))))))
+
+(defun flycheck-swiftx--sdk-root (&optional build-settings)
+"Return the sdk root for BUILD-SETTINGS.
+Falling back to flycheck-swiftx-sdk if BUILD-SETTINGS is nil."
+(let ((sdk-root (or (alist-get 'SDKROOT build-settings)
+                    flycheck-swiftx-sdk)))
+  (if (equal sdk-root "iphoneos")
+      "iphonesimulator"
+    sdk-root)))
 
 (defun flycheck-swiftx--sdk-path (&optional build-settings)
-  "Return the platform sdk for BUILD-SETTINGS.
-If no valid sdk is found, return `flycheck-swiftx--xcrun-sdk-path' using
-XCRUN-PATH.
+  "Return the sdk path for BUILD-SETTINGS.
+If no valid sdk is found, return the default sdk path."
+  (flycheck-swiftx--xcrun-sdk-path 'sdk
+                                   (flycheck-swiftx--sdk-root build-settings)))
 
-If BUILD-SETTINGS is nil return `flycheck-swiftx--xcrun-sdk-path'."
-  (let ((sdk-root (or (alist-get 'SDKROOT build-settings)
-                      flycheck-swiftx-sdk)))
-    (when (equal sdk-root "iphoneos")
-      (setq sdk-root "iphonesimulator"))
-    (flycheck-swiftx--xcrun-sdk-path sdk-root)))
+(defun flycheck-swiftx--sdk-platform-path (&optional build-settings)
+  "Return the sdk platform path for BUILD-SETTINGS.
+If no valid sdk is found, return the default sdk platform path."
+  (flycheck-swiftx--xcrun-sdk-path 'platform
+                                   (flycheck-swiftx--sdk-root build-settings)))
 
 (defun flycheck-swiftx--list-swift-files (directory)
   "Return list of full paths to swift files in the specified DIRECTORY."
@@ -295,6 +351,20 @@ Otherwise return FILE-NAME's directory."
     (if-let ((package-dir (locate-dominating-file file-name "Package.swift")))
         (expand-file-name package-dir)
       (file-name-directory file-name))))
+
+(defun flycheck-swiftx--find-xcworkspace (directory-or-file)
+  "Search DIRECTORY-OR-FILE and parent directories for an Xcode workspace file.
+Returns the path to the Xcode workspace, or nil if not found."
+  (when directory-or-file
+    (let (xcworkspace
+          (directory (if (file-directory-p directory-or-file)
+                         directory-or-file
+                       (file-name-directory directory-or-file))))
+      (setq directory (expand-file-name directory))
+      (while (and (not xcworkspace) (not (equal directory "/")))
+        (setq xcworkspace (directory-files directory t ".*\\.xcworkspace$" nil))
+        (setq directory (file-name-directory (directory-file-name directory))))
+      (car xcworkspace))))
 
 (defun flycheck-swiftx--source-files (&optional xcproj target-name)
   "Return the swift source files associated with the current buffer.
@@ -361,6 +431,12 @@ Header path is interpreted relative to XCPROJ-PATH."
                      preprocessor-defs
                      (alist-get 'GCC_PREPROCESSOR_DEFINITIONS_NOT_USED_IN_PRECOMPS build-settings))))
 
+(defun flycheck-swiftx--options-testing (build-settings)
+  "Return swiftc options suitable for a test target using BUILD-SETTINGS."
+  (if-let ((platform-path (flycheck-swiftx--sdk-platform-path build-settings)))
+      (list "-enable-testing" "-F" (concat (file-name-as-directory platform-path) "Developer/Library/Frameworks"))
+    '("-enable-testing")))
+
 (defun flycheck-swiftx--string-option (key build-settings)
   "Return the string value for KEY in BUILD-SETTINGS."
   (when-let* ((value (alist-get key build-settings))
@@ -373,6 +449,16 @@ Header path is interpreted relative to XCPROJ-PATH."
     (if (stringp values)
         (seq-into (split-string values) 'vector)
       values)))
+
+(defun flycheck-swiftx--path-option (key build-settings build-env)
+  "Return list of options for KEY in BUILD-SETTINGS expanding with BUILD-ENV."
+  (when-let ((values (flycheck-swiftx--list-option key build-settings)))
+    (seq-map (lambda (value)
+               (seq-reduce (lambda (result env)
+                             (replace-regexp-in-string (format "$(?%s)?" (car env)) (cdr env) result t t))
+                           build-env
+                           value))
+             values)))
 
 (defun flycheck-swiftx--append-options (prefix options)
   "Append OPTIONS to PREFIX.
@@ -403,10 +489,10 @@ Otherwise fall back to the flycheck-swiftx custom options."
           ;; ensure -sdk is present in build-options
           (unless (seq-contains build-options "-sdk")
             (setq build-options (append build-options `("-sdk" ,(flycheck-swiftx--sdk-path)))))
-             `(,@build-options
-               ;; Associated source files, ignoring the file currently being checked.
-               ,@(when-let (source-files (flycheck-swiftx--source-files))
-                   (remove file-name source-files))))))))
+          `(,@build-options
+            ;; Associated source files, ignoring the file currently being checked.
+            ,@(when-let (source-files (flycheck-swiftx--source-files))
+                (remove file-name source-files))))))))
 
 (defun flycheck-swiftx--xcode-options (xcproj-path file-name)
   "Return a list of swiftc options obtained from the XCPROJ-PATH.
@@ -414,16 +500,18 @@ Otherwise fall back to the flycheck-swiftx custom options."
 FILE-NAME should be part of the project and is used to determine
 the current target.  Only the first target found is used."
   (when-let* ((xcproj (flycheck-swiftx--load-xcode-project xcproj-path))
-              (target-name (car (xcode-project-target-names-for-file xcproj file-name "PBXSourcesBuildPhase"))))
+              (target-name (flycheck-swiftx--target-name file-name xcproj)))
     ;; build-settings are optional (though should usually be present).
-    (let ((build-settings (flycheck-swiftx--xcode-build-settings xcproj target-name))
-          (build-products-dir (xcode-project-concat-path (flycheck-swiftx--target-build-dir target-name)
+    (let ((build-env (cons '("PROJECT_DIR" . (directory-file-name (file-name-directory xcproj-path))) flycheck-swiftx-build-env))
+          (build-settings (flycheck-swiftx--xcode-build-settings xcproj target-name))
+          (build-products-dir (xcode-project-concat-path (flycheck-swiftx--target-build-dir target-name xcproj-path)
                                                          "Build/Products"
-                                                         (or flycheck-swiftx-xcode-build-config "Debug"))))
+                                                         (or flycheck-swiftx-xcode-build-config "Debug")))
+          (enable-testing (flycheck-swiftx--maybe-test file-name)))
       `(
         ,@(flycheck-swiftx--append-options "-module-name" target-name)
         ,@(flycheck-swiftx--append-options "-target"
-                                           (flycheck-swiftx--target build-settings))
+                                           (flycheck-swiftx--deployment-target build-settings))
         ,@(flycheck-swiftx--append-options "-swift-version"
                                            (flycheck-swiftx--swift-version build-settings))
         ,@(flycheck-swiftx--append-options "-sdk"
@@ -435,25 +523,34 @@ the current target.  Only the first target found is used."
                                            (flycheck-swiftx--gcc-compilation-flags build-settings))
         ;; Other compiler flags
         ,@(flycheck-swiftx--list-option 'OTHER_SWIFT_FLAGS build-settings)
+        ;; Tests
+        ,@(when enable-testing (flycheck-swiftx--options-testing build-settings))
         ;; Search paths
         ,@(flycheck-swiftx--append-options "-F"
-                                           (flycheck-swiftx--list-option 'FRAMEWORK_SEARCH_PATHS
-                                                                         build-settings))
+                                           (flycheck-swiftx--path-option 'FRAMEWORK_SEARCH_PATHS
+                                                                                build-settings
+                                                                                build-env))
         ,@(flycheck-swiftx--append-options "-I"
-                                           (flycheck-swiftx--list-option 'HEADER_SEARCH_PATHS
-                                                                         build-settings))
+                                           (flycheck-swiftx--path-option 'HEADER_SEARCH_PATHS
+                                                                                build-settings
+                                                                                build-env))
         ,@(flycheck-swiftx--append-options "-I"
-                                           (flycheck-swiftx--list-option 'USER_HEADER_SEARCH_PATHS
-                                                                         build-settings))
+                                           (flycheck-swiftx--path-option 'USER_HEADER_SEARCH_PATHS
+                                                                                build-settings
+                                                                                build-env))
         ,@(flycheck-swiftx--append-options "-I"
-                                           (flycheck-swiftx--list-option 'SYSTEM_HEADER_SEARCH_PATHS
-                                                                         build-settings))
+                                           (flycheck-swiftx--path-option 'SYSTEM_HEADER_SEARCH_PATHS
+                                                                                build-settings
+                                                                                build-env))
         ,@(flycheck-swiftx--append-options "-I"
-                                           (flycheck-swiftx--list-option 'SWIFT_INCLUDE_PATHS
-                                                                         build-settings))
+                                           (flycheck-swiftx--path-option 'SWIFT_INCLUDE_PATHS
+                                                                                build-settings
+                                                                                build-env))
         ,@(flycheck-swiftx--append-options "-F"
                                            (seq-map (lambda (path) (concat (file-name-as-directory path) "Library/Frameworks"))
-                                                    (flycheck-swiftx--list-option 'ADDITIONAL_SDKS build-settings)))
+                                                    (flycheck-swiftx--path-option 'ADDITIONAL_SDKS
+                                                                                         build-settings
+                                                                                         build-env)))
         ;; Add target build dir to ensure that any framework dependencies are found
         ,@(flycheck-swiftx--append-options "-F" build-products-dir)
         ,@(flycheck-swiftx--append-options "-I" build-products-dir)
@@ -505,7 +602,7 @@ See URL `https://swift.org/'."
                            ": " "error: " (optional (message)) line-end))
   :error-filter 'flycheck-swiftx--error-filter
   ;; Ensure paths (e.g flycheck-swiftx-sources) are interpreted relative to project's root directory.
-  :working-directory '(lambda (checker) (flycheck-swiftx--project-root (or load-file-name buffer-file-name)))
+  :working-directory (lambda (_) (flycheck-swiftx--project-root (or load-file-name buffer-file-name)))
   :modes 'swift-mode)
 
 ;; Set up Flycheck for Swift.
