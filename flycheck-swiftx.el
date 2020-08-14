@@ -526,6 +526,12 @@ the current target.  Only the first target found is used."
         ;; Tests
         ,@(when enable-testing (flycheck-swiftx--options-testing build-settings))
         ;; Search paths
+        ;; Note: SDK search path should come before other framework search paths.
+        ,@(flycheck-swiftx--append-options "-F"
+                                           (seq-map (lambda (path) (concat (file-name-as-directory path) "Library/Frameworks"))
+                                                    (flycheck-swiftx--path-option 'ADDITIONAL_SDKS
+                                                                                  build-settings
+                                                                                  build-env)))
         ,@(flycheck-swiftx--append-options "-F"
                                            (flycheck-swiftx--path-option 'FRAMEWORK_SEARCH_PATHS
                                                                                 build-settings
@@ -546,11 +552,6 @@ the current target.  Only the first target found is used."
                                            (flycheck-swiftx--path-option 'SWIFT_INCLUDE_PATHS
                                                                                 build-settings
                                                                                 build-env))
-        ,@(flycheck-swiftx--append-options "-F"
-                                           (seq-map (lambda (path) (concat (file-name-as-directory path) "Library/Frameworks"))
-                                                    (flycheck-swiftx--path-option 'ADDITIONAL_SDKS
-                                                                                         build-settings
-                                                                                         build-env)))
         ;; Add target build dir to ensure that any framework dependencies are found
         ,@(flycheck-swiftx--append-options "-F" build-products-dir)
         ,@(flycheck-swiftx--append-options "-I" build-products-dir)
