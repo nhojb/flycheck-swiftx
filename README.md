@@ -1,6 +1,8 @@
-# flycheck-swiftx
+[![MELPA](https://melpa.org/packages/flycheck-swiftx-badge.svg)](https://melpa.org/#/flycheck-swiftx)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+# flycheck-swiftx
 
 A Swift syntax checker using Swift compiler frontend, with support for Xcode projects.
 
