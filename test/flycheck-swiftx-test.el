@@ -1,8 +1,8 @@
 ;;; flycheck-swiftx-test.el --- Flycheck Swift: Test cases
 
-;; Copyright (c) 2019 John Buckley <john@olivetoast.com>
+;; Copyright (c) 2022 John Buckley <nhoj.buckley@gmail.com>
 
-;; Author: John Buckley <john@olivetoast.com>
+;; Author: John Buckley <nhoj.buckley@gmail.com>
 ;; URL: https://github.com/nhojb/flycheck-swiftx
 
 ;; This file is not part of GNU Emacs.
@@ -340,13 +340,13 @@
                   ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))))))))
 
 (flycheck-ert-def-checker-test swiftx swift find-xcodeproj
-  (should (equal (flycheck-swiftx--find-xcodeproj (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))
+  (should (equal (flycheck-swiftx-find-xcproj-path (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))
                  (flycheck-swiftx-test--expand-file-name "TestApp/TestApp.xcodeproj"))))
 
 (flycheck-ert-def-checker-test swiftx swift find-xcworkspace
-  (should (equal (flycheck-swiftx--find-xcworkspace (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))
+  (should (equal (flycheck-swiftx-find-xcworkspace-path (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift"))
                  (flycheck-swiftx-test--expand-file-name "TestApp/TestApp.xcworkspace")))
-  (should (equal (flycheck-swiftx--find-xcworkspace (file-name-directory (flycheck-swiftx-test--expand-file-name "TestApp/TestApp.xcodeproj")))
+  (should (equal (flycheck-swiftx-find-xcworkspace-path (file-name-directory (flycheck-swiftx-test--expand-file-name "TestApp/TestApp.xcodeproj")))
                  (flycheck-swiftx-test--expand-file-name "TestApp/TestApp.xcworkspace"))))
 
 (flycheck-ert-def-checker-test swiftx swift project-root
