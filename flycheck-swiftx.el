@@ -40,12 +40,17 @@
 ;;
 ;; - Apple Swift 5
 ;;
+;; - Packages
+;;   flycheck-swiftx has basic support for parsing Swift packages.
+;;   It will attempt to infer the correct build settings and will also import dependencies
+;;   from either the `.build` directory or the Xcode project build directory if found.
+;;
 ;; - Xcode projects
-;;   Flycheck-swiftx can parse Xcode projects and use the build settings for the project.
+;;   flycheck-swiftx can parse Xcode projects and use the build settings for the project.
 ;;   This means that complex projects, which may include various dependencies, can be
 ;;   typechecked automatically with swiftc.
 ;;
-;; - For non-Xcode projects provide your own configuration via `flycheck-swiftx-build-options` and `flycheck-swiftx-sources`.
+;; - As a fallback you can provide your own configuration e.g. via `flycheck-swiftx-build-options` and `flycheck-swiftx-sources`.
 ;;
 ;; - `xcrun` command support (only on macOS)
 ;;
