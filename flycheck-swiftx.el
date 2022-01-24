@@ -173,36 +173,11 @@ May be specified as a dir local variable in the project's root."
 ;; Clean-up cache directories
 (add-hook 'kill-emacs-hook #'flycheck-swiftx--cache-cleanup)
 
-(defun flycheck-swiftx--xcrun-sdk-path (path-type &optional sdk-name)
-  "Return a path from `xcrun --sdk ${SDK-NAME} ${PATH-TYPE}'."
-  (when-let ((xcrun-path (executable-find "xcrun"))
-             (xcrun-cmd (if (eq path-type 'platform)
-                            "--show-sdk-platform-path"
-                          "--show-sdk-path"))
-             (xcrun-sdk (if (equal sdk-name "macos") "macosx" sdk-name)))
-      (string-trim (shell-command-to-string
-                    (format "%s %s %s" xcrun-path xcrun-cmd
-                            (if xcrun-sdk (format "--sdk %s" xcrun-sdk) ""))))))
-
-(defun flycheck-swiftx--sdk-root (&optional sdk-name)
-"Return the sdk root for SDK-NAME.
-Falling back to flycheck-swiftx-sdk if SDK-NAME is nil."
-(let ((sdk-root (or sdk-name flycheck-swiftx-sdk)))
-  (if (equal sdk-root "iphoneos")
-      "iphonesimulator"
-    sdk-root)))
-
 (defun flycheck-swiftx--sdk-path (&optional sdk-name)
   "Return the sdk path for SDK-NAME.
 If no valid sdk is found, return the default sdk path."
   (flycheck-swiftx--xcrun-sdk-path 'sdk
-                                   (flycheck-swiftx--sdk-root sdk-name)))
-
-(defun flycheck-swiftx--sdk-platform-path (&optional build-settings)
-  "Return the sdk platform path for BUILD-SETTINGS.
-If no valid sdk is found, return the default sdk platform path."
-  (flycheck-swiftx--xcrun-sdk-path 'platform
-                                   (flycheck-swiftx--sdk-root build-settings)))
+                                   (flycheck-swiftx--sdk-name (or sdk-name flycheck-swiftx-sdk))))
 
 (defun flycheck-swiftx--project-root (file-name)
   "Return the project root directory for FILE-NAME.
@@ -223,7 +198,7 @@ Otherwise return FILE-NAME's directory."
   (or (flycheck-swiftx--locate-dominating-file file-name ".git")
       (file-name-directory file-name)))
 
-(defun flycheck-swiftx--source-files (file-name)
+(defun flycheck-swiftx--source-files (&optional file-name)
   "Return the swift source files specified by `flycheck-swiftx-sources'.
 
 If FILE-NAME is non-nil it is removed from the list of source files."
@@ -341,7 +316,7 @@ the current target.  Only the first target found is used."
         ,@(flycheck-swiftx--append-options "-swift-version"
                                            (flycheck-swiftx-xcode-swift-version build-settings))
         ,@(flycheck-swiftx--append-options "-sdk"
-                                           (flycheck-swiftx--sdk-path (alist-get 'SDKROOT build-settings)))
+                                           (flycheck-swiftx--sdk-path (flycheck-swiftx-xcode-sdk-root build-settings)))
         ,@(flycheck-swiftx--append-options "-import-objc-header"
                                            (flycheck-swiftx-xcode-objc-bridging-header build-settings xcproj-path))
         ,@(flycheck-swiftx-xcode-objc-inference build-settings)

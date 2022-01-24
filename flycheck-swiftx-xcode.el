@@ -93,7 +93,7 @@ Returns the path to the Xcode workspace, or nil if not found."
         (setq directory (file-name-directory (directory-file-name directory))))
       (car xcworkspace))))
 
-(defun flycheck-swiftx-xcode-source-files (xcproj target-name file-name)
+(defun flycheck-swiftx-xcode-source-files (xcproj target-name &optional file-name)
   "Return the swift source files for the specified XCPROJ TARGET-NAME.
 
 If FILE-NAME is non-nil it is removed from the list of source files."
@@ -170,6 +170,9 @@ Uses heuristics to locate the build dir in
         (number-to-string (truncate swift-version))
       (number-to-string swift-version))))
 
+(defun flycheck-swiftx-xcode-sdk-root (build-settings)
+  "Return SDK root name for BUILD-SETTINGS."
+  (alist-get 'SDKROOT build-settings))
 
 (defun flycheck-swiftx-xcode-objc-bridging-header (build-settings xcproj-path)
   "Return path to Objc bridging header if found in BUILD-SETTINGS.
@@ -199,7 +202,7 @@ Header path is interpreted relative to XCPROJ-PATH."
 (defun flycheck-swiftx-xcode-options-testing (build-settings)
   "Return swiftc options suitable for a test target using BUILD-SETTINGS."
   (if-let ((platform-path (flycheck-swiftx--sdk-platform-path build-settings)))
-      (list "-enable-testing" "-F" (concat (file-name-as-directory platform-path) "Developer/Library/Frameworks"))
+      (list "-enable-testing" "-F" (file-name-concat platform-path "Developer/Library/Frameworks"))
     '("-enable-testing")))
 
 (defun flycheck-swiftx-xcode-string-option (key build-settings)
@@ -253,6 +256,12 @@ has changed."
   "Cache the parsed project PROJ for XCPROJ-PATH."
   (when-let (cache-path (flycheck-swiftx--xcodeproj-cache-path xcproj-path))
     (ignore-errors (xcode-project-serialize proj cache-path))))
+
+(defun flycheck-swiftx--sdk-platform-path (&optional build-settings)
+  "Return the sdk platform path for BUILD-SETTINGS.
+If no valid sdk is found, return the default sdk platform path."
+  (flycheck-swiftx--xcrun-sdk-path 'platform
+                                   (flycheck-swiftx--sdk-name (flycheck-swiftx-xcode-sdk-root build-settings))))
 
 (provide 'flycheck-swiftx-xcode)
 ;;; flycheck-swiftx-xcode.el ends here

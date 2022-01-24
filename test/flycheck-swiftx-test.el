@@ -37,6 +37,9 @@
 
 (require 'flycheck-ert)
 (require 'flycheck-swiftx)
+(require 'flycheck-swiftx-package)
+(require 'flycheck-swiftx-xcode)
+(require 'flycheck-swiftx-utils)
 
 (message "Running tests on Emacs %s" emacs-version)
 
@@ -291,7 +294,7 @@
   (let ((xcproj (xcode-project-read (flycheck-swiftx-test--expand-file-name "TestApp/TestApp.xcodeproj")))
         (test-file (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/AppDelegate.swift")))
     (flycheck-ert-with-file-buffer test-file
-      (should (equal (flycheck-swiftx--source-files xcproj "TestApp")
+      (should (equal (flycheck-swiftx-xcode-source-files xcproj "TestApp")
                      `(,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/AppDelegate.swift")
                        ,(flycheck-swiftx-test--expand-file-name "TestApp/TestApp/ViewController.swift")))))))
 
@@ -319,7 +322,7 @@
     ;; valid project
     (let* ((xcproj-path (flycheck-swiftx-test--expand-file-name "TestApp/TestApp.xcodeproj"))
            (test-file (flycheck-swiftx-test--expand-file-name "TestApp/TestApp/AppDelegate.swift"))
-           (target-build-dir (flycheck-swiftx--target-build-dir "TestApp" xcproj-path)))
+           (target-build-dir (flycheck-swiftx-xcode-build-dir xcproj-path "TestApp")))
       (flycheck-ert-with-file-buffer test-file
         (should
          (equal (flycheck-swiftx--swiftc-options)

@@ -46,6 +46,21 @@
   (when-let (path (locate-dominating-file file name))
     (expand-file-name path)))
 
+(defun flycheck-swiftx--sdk-name (sdk-name)
+  "Return the actual sdk name for SDK-NAME."
+  (if (equal sdk-name "iphoneos") "iphonesimulator" sdk-name))
+
+(defun flycheck-swiftx--xcrun-sdk-path (path-type &optional sdk-name)
+  "Return a path from `xcrun --sdk ${SDK-NAME} ${PATH-TYPE}'."
+  (when-let ((xcrun-path (executable-find "xcrun"))
+             (xcrun-cmd (if (eq path-type 'platform)
+                            "--show-sdk-platform-path"
+                          "--show-sdk-path"))
+             (xcrun-sdk (if (equal sdk-name "macos") "macosx" sdk-name)))
+      (string-trim (shell-command-to-string
+                    (format "%s %s %s" xcrun-path xcrun-cmd
+                            (if xcrun-sdk (format "--sdk %s" xcrun-sdk) ""))))))
+
 ;; Cache
 
 (defvar flycheck-swiftx--cache-directory nil
