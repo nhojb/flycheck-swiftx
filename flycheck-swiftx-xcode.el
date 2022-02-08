@@ -156,10 +156,10 @@ Uses heuristics to locate the build dir in
       (let ((macos-target (alist-get 'MACOSX_DEPLOYMENT_TARGET build-settings))
             (iphoneos-target (alist-get 'IPHONEOS_DEPLOYMENT_TARGET build-settings)))
         (cond (macos-target
-               (format "x86_64-apple-macosx%s" macos-target))
+               (format "%s-apple-macosx%s" (flycheck-swiftx-arch) macos-target))
               (iphoneos-target
                ;; We never want "arm*" for flycheck.
-               (format "x86_64-apple-ios%s" iphoneos-target))))))
+               (format "%s-apple-ios%s" (flycheck-swiftx-arch) iphoneos-target))))))
 
 (defun flycheck-swiftx-xcode-swift-version (build-settings)
   "Return the swift version for BUILD-SETTINGS."

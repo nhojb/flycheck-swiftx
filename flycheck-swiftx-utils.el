@@ -61,6 +61,10 @@
                     (format "%s %s %s" xcrun-path xcrun-cmd
                             (if xcrun-sdk (format "--sdk %s" xcrun-sdk) ""))))))
 
+(defun flycheck-swiftx-arch ()
+    "Return the current CPU architecture as a string."
+  (if (s-contains-p "aarch64" system-configuration) "arm64" "x86_64"))
+
 ;; Cache
 
 (defvar flycheck-swiftx--cache-directory nil

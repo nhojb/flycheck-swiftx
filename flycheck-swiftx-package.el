@@ -169,9 +169,9 @@ If FILE-NAME is non-nil it is removed from the list of source files."
 (defun flycheck-swiftx-package-deployment-target (platform)
   "Return the build target for PLATFORM."
   (cond ((equal "macos" (flycheck-swiftx-package-platform-name platform))
-         (format "x86_64-apple-macosx%s" (flycheck-swiftx-package-platform-version platform)))
+         (format "%s-apple-macosx%s" (flycheck-swiftx-arch) (flycheck-swiftx-package-platform-version platform)))
         ((equal "ios" (flycheck-swiftx-package-platform-name platform))
-         (format "x86_64-apple-ios%s" (flycheck-swiftx-package-platform-version platform)))))
+         (format "%s-apple-ios%s" (flycheck-swiftx-arch) (flycheck-swiftx-package-platform-version platform)))))
 
 ;; Target
 
