@@ -40,6 +40,7 @@
 ;;; Code:
 
 (require 'flycheck)
+(require 's)
 
 (defun flycheck-swiftx--locate-dominating-file (file name)
   "Starting at FILE, look up directory hierarchy for directory containing NAME."
